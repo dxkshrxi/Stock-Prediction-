@@ -1,0 +1,97 @@
+import tkinter as tk
+from tkinter import messagebox, ttk
+import yfinance as yf
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+import matplotlib.pyplot as plt
+
+class StockPredictorApp:
+    def __init__(self, master):
+        self.master = master
+        master.title("Stock Price Predictor")
+        master.geometry("500x400")
+        master.configure(bg="#1E1E1E")  # Dark background
+
+        # Title label
+        self.title_label = tk.Label(master, text="Stock Price Predictor", bg="#1E1E1E", fg="#00BFFF", font=("Helvetica Neue", 18, "bold"))
+        self.title_label.pack(pady=(20, 10))
+
+        # Frame for inputs
+        self.input_frame = ttk.Frame(master, padding=20, style="TFrame")
+        self.input_frame.pack(pady=20)
+
+        self.label = ttk.Label(self.input_frame, text="Enter Stock Symbol:", background="#1E1E1E", foreground="white", font=("Helvetica Neue", 12))
+        self.label.pack(pady=(0, 5))
+
+        self.stock_symbol_entry = ttk.Entry(self.input_frame, font=("Helvetica Neue", 12), width=20)
+        self.stock_symbol_entry.pack(pady=(0, 15), fill='x')
+
+        self.predict_button = ttk.Button(self.input_frame, text="Predict", command=self.predict_stock)
+        self.predict_button.pack(pady=(0, 10))
+
+        self.result_label = ttk.Label(master, text="", background="#1E1E1E", font=("Helvetica Neue", 14), foreground="white")
+        self.result_label.pack(pady=(10, 5))
+
+        # Status label for user feedback
+        self.status_label = ttk.Label(master, text="", background="#1E1E1E", foreground="#FF5252")
+        self.status_label.pack(pady=(5, 10))
+
+        # Footer label
+        self.footer_label = tk.Label(master, text="Powered by yFinance & Scikit-Learn", bg="#1E1E1E", fg="#A9A9A9", font=("Helvetica Neue", 10))
+        self.footer_label.pack(side=tk.BOTTOM, pady=(10, 0))
+
+    def fetch_and_predict(self, stock_symbol):
+        stock_data = yf.download(stock_symbol, start='2010-01-01', end='2024-11-12')
+        
+        if stock_data.empty:
+            return None, None
+
+        stock_data['EMA-50'] = stock_data['Close'].ewm(span=50, adjust=False).mean()
+        stock_data['EMA-200'] = stock_data['Close'].ewm(span=200, adjust=False).mean()
+        
+        stock_data = stock_data.dropna()
+        X = stock_data[['Open', 'High', 'Low', 'Volume', 'EMA-50', 'EMA-200']]
+        y = stock_data['Close']
+        
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+        model = LinearRegression()
+        model.fit(X_train, y_train)
+
+        last_data = stock_data.iloc[-1][['Open', 'High', 'Low', 'Volume', 'EMA-50', 'EMA-200']].values.reshape(1, -1)
+        predicted_close = model.predict(last_data)[0]
+
+        return predicted_close, stock_data
+
+    def plot_predictions(self, stock_data, predicted_value):
+        plt.figure(figsize=(10, 5))
+        plt.plot(stock_data.index, stock_data['Close'], label='Actual Closing Price', color='#00BFFF')
+        plt.axhline(y=predicted_value, color='#FF5722', linestyle='--', label='Predicted Closing Price')
+        plt.title('Stock Price Prediction', fontsize=14)
+        plt.xlabel('Date', fontsize=12)
+        plt.ylabel('Price (in USD)', fontsize=12)
+        plt.legend()
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        plt.grid()
+        plt.show()
+
+    def predict_stock(self):
+        stock_symbol = self.stock_symbol_entry.get().strip().upper()
+        if not stock_symbol:
+            messagebox.showerror("Input Error", "Please enter a stock symbol.")
+            return
+        
+        predicted_value, stock_data = self.fetch_and_predict(stock_symbol)
+        if predicted_value is not None:
+            predicted_price = predicted_value.item()
+            self.result_label.config(text=f'The predicted closing price for {stock_symbol} is ${predicted_price:.2f}')
+            self.plot_predictions(stock_data, predicted_price)
+            self.status_label
+            self.status_label.config(text='Stock symbol not found. Please try again.', foreground="#d32f2f")
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = StockPredictorApp(root)
+    root.mainloop()
